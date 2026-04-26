@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Crunchyroll Auto Skip + Next
 // @namespace    https://github.com/JoshApp/crunchyroll-autoskip
-// @version      0.2.5
-// @description  Auto-clicks Crunchyroll's Skip Intro / Skip Credits / Next Episode buttons.
+// @version      0.3.0
+// @description  Auto-clicks Crunchyroll's Skip Intro / Skip Credits / Next Episode buttons. Falls back to AniSkip's crowdsourced timestamps for shows without native skip buttons.
 // @author       josh
 // @match        *://*.crunchyroll.com/*
 // @match        *://crunchyroll.com/*
@@ -15,12 +15,13 @@
 (function () {
   'use strict';
 
-  const VERSION = '0.2.5';
+  const VERSION = '0.3.0';
   const DEBUG = localStorage.getItem('cr-autoskip-debug') === '1';
   const FEATURES = {
-    skipIntro: localStorage.getItem('cr-autoskip-intro') !== '0',
-    skipOutro: localStorage.getItem('cr-autoskip-outro') !== '0',
-    autoNext:  localStorage.getItem('cr-autoskip-next')  !== '0',
+    skipIntro: localStorage.getItem('cr-autoskip-intro')   !== '0',
+    skipOutro: localStorage.getItem('cr-autoskip-outro')   !== '0',
+    autoNext:  localStorage.getItem('cr-autoskip-next')    !== '0',
+    aniskip:   localStorage.getItem('cr-autoskip-aniskip') !== '0',
   };
 
   const log = (...args) => DEBUG && console.log('[cr-autoskip]', ...args);
@@ -139,8 +140,176 @@
     log('attached ended listener to main video', v);
   };
 
+  // -------- AniSkip fallback --------
+  // For shows where Crunchyroll doesn't expose Skip Intro / Skip Credits
+  // buttons (e.g. One Piece), use AniSkip's crowdsourced OP/ED timestamps:
+  //  1. extract show title + episode number from the page
+  //  2. resolve the show to a MyAnimeList ID via AniList GraphQL
+  //  3. fetch skip-time intervals from api.aniskip.com
+  //  4. seek the <video> past those intervals as currentTime enters them
+  // Caches MAL IDs and skip-times in localStorage to avoid re-requesting.
+
+  const ANILIST_API   = 'https://graphql.anilist.co';
+  const ANISKIP_API   = 'https://api.aniskip.com/v2/skip-times';
+  const SKIP_TYPES    = ['op', 'ed', 'mixed-op', 'mixed-ed', 'recap'];
+  const MAL_CACHE_KEY = 'cr-autoskip-malid-cache';
+  const SKIP_CACHE_KEY = 'cr-autoskip-skiptimes-cache';
+
+  const safeParse = (str, fallback) => {
+    try { return JSON.parse(str || ''); } catch { return fallback; }
+  };
+  const getCache = (key) => safeParse(localStorage.getItem(key), {}) || {};
+  const setCache = (key, map) => {
+    try { localStorage.setItem(key, JSON.stringify(map)); } catch {}
+  };
+
+  const extractShowTitle = () => {
+    for (const script of document.querySelectorAll('script[type="application/ld+json"]')) {
+      const data = safeParse(script.textContent, null);
+      const items = Array.isArray(data) ? data : [data];
+      for (const obj of items) {
+        const series = obj?.partOfTVSeries || obj?.partOfSeries;
+        if (series?.name) return String(series.name).trim();
+      }
+    }
+    const og = document.querySelector('meta[property="og:title"]')?.content;
+    const sources = [og, document.title].filter(Boolean);
+    for (const text of sources) {
+      const m = text.match(/^(?:Watch\s+)?(.+?)(?:\s+Season\s+\d+|\s+Episode\s+\d+|\s+Ep\.?\s+\d+|\s+S\d+E\d+|\s*[-–:]\s)/i);
+      if (m) return m[1].trim();
+    }
+    return null;
+  };
+
+  const extractEpisodeNumber = () => {
+    for (const script of document.querySelectorAll('script[type="application/ld+json"]')) {
+      const data = safeParse(script.textContent, null);
+      const items = Array.isArray(data) ? data : [data];
+      for (const obj of items) {
+        if (obj?.episodeNumber != null) {
+          const n = parseInt(obj.episodeNumber, 10);
+          if (!isNaN(n)) return n;
+        }
+      }
+    }
+    const og = document.querySelector('meta[property="og:title"]')?.content || '';
+    for (const text of [og, document.title]) {
+      const m = text.match(/(?:Episode|Ep\.?)\s*(\d+)/i);
+      if (m) return parseInt(m[1], 10);
+    }
+    return null;
+  };
+
+  const fetchMalId = async (title) => {
+    const cache = getCache(MAL_CACHE_KEY);
+    if (Object.prototype.hasOwnProperty.call(cache, title)) return cache[title];
+    const query = 'query ($search: String) { Media(search: $search, type: ANIME) { idMal title { romaji english } } }';
+    try {
+      const res = await fetch(ANILIST_API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ query, variables: { search: title } }),
+      });
+      if (!res.ok) throw new Error(`AniList HTTP ${res.status}`);
+      const data = await res.json();
+      const malId = data?.data?.Media?.idMal || null;
+      cache[title] = malId;
+      setCache(MAL_CACHE_KEY, cache);
+      log('AniSkip: AniList', title, '->', malId);
+      return malId;
+    } catch (e) {
+      log('AniSkip: AniList lookup failed', e);
+      return null;
+    }
+  };
+
+  const fetchSkipTimes = async (malId, ep, duration) => {
+    const cacheKey = `${malId}:${ep}:${Math.round(duration)}`;
+    const cache = getCache(SKIP_CACHE_KEY);
+    if (Object.prototype.hasOwnProperty.call(cache, cacheKey)) return cache[cacheKey];
+    const params = SKIP_TYPES.map((t) => `types[]=${encodeURIComponent(t)}`).join('&');
+    const url = `${ANISKIP_API}/${malId}/${ep}?${params}&episodeLength=${Math.round(duration)}`;
+    try {
+      const res = await fetch(url);
+      if (!res.ok) {
+        cache[cacheKey] = [];
+        setCache(SKIP_CACHE_KEY, cache);
+        return [];
+      }
+      const data = await res.json();
+      const results = Array.isArray(data?.results) ? data.results : [];
+      cache[cacheKey] = results;
+      setCache(SKIP_CACHE_KEY, cache);
+      log('AniSkip: skip-times', cacheKey, results);
+      return results;
+    } catch (e) {
+      log('AniSkip: skip-times fetch failed', e);
+      return [];
+    }
+  };
+
+  const aniSkipState = { key: null, times: [], applied: new Set() };
+
+  const setupAniSkip = async () => {
+    if (!FEATURES.aniskip) return;
+    const v = getMainVideo();
+    if (!v || !isFinite(v.duration) || v.duration < 60) return;
+    const title = extractShowTitle();
+    const ep    = extractEpisodeNumber();
+    if (!title || !ep) {
+      log('AniSkip: could not extract title/episode', { title, ep });
+      return;
+    }
+    const key = `${title}:${ep}:${Math.round(v.duration)}`;
+    if (aniSkipState.key === key) return;
+    aniSkipState.key = key;
+    aniSkipState.times = [];
+    aniSkipState.applied = new Set();
+    const malId = await fetchMalId(title);
+    if (!malId || aniSkipState.key !== key) return;
+    const times = await fetchSkipTimes(malId, ep, v.duration);
+    if (aniSkipState.key !== key) return;
+    aniSkipState.times = times;
+    log('AniSkip: armed', key, 'with', times.length, 'intervals');
+  };
+
+  const onTimeUpdate = () => {
+    if (!FEATURES.aniskip || aniSkipState.times.length === 0) return;
+    const v = getMainVideo();
+    if (!v) return;
+    const t = v.currentTime;
+    for (const skip of aniSkipState.times) {
+      const interval = skip.interval || skip;
+      const start = Number(interval.startTime ?? interval.start);
+      const end   = Number(interval.endTime   ?? interval.end);
+      if (!isFinite(start) || !isFinite(end) || end <= start) continue;
+      if (t >= start && t < end - 0.5) {
+        const dedupKey = `${skip.skipType || 'unknown'}:${start.toFixed(1)}:${end.toFixed(1)}`;
+        if (aniSkipState.applied.has(dedupKey)) continue;
+        aniSkipState.applied.add(dedupKey);
+        log(`AniSkip: jumping ${t.toFixed(1)} -> ${end.toFixed(1)} (${skip.skipType})`);
+        v.currentTime = end;
+        return;
+      }
+    }
+  };
+
+  const aniSkipAttached = new WeakSet();
+  const ensureAniSkip = () => {
+    if (!FEATURES.aniskip) return;
+    const v = getMainVideo();
+    if (!v || aniSkipAttached.has(v)) return;
+    aniSkipAttached.add(v);
+    v.addEventListener('timeupdate', onTimeUpdate);
+    v.addEventListener('loadedmetadata', () => setupAniSkip());
+    v.addEventListener('durationchange', () => setupAniSkip());
+    log('AniSkip: attached listeners');
+    setupAniSkip();
+  };
+
   const tick = () => {
     ensureEndedListener();
+    ensureAniSkip();
 
     if (FEATURES.skipIntro) {
       const btn = findClickable((el) =>

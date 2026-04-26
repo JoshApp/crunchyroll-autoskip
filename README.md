@@ -25,11 +25,9 @@ The userscript declares an `@updateURL` pointing at GitHub Pages, so Tampermonke
 
 ## What it does
 
-- **MutationObserver** on the player DOM watches for buttons matching "Skip Intro" / "Skip Credits" / "Next Episode" by visible text, `data-testid`, or `aria-label`.
-- Clicks them as soon as they appear and become visible.
-- 5-second cooldown per action so a single button can't get spammed; the next episode triggers fresh.
-
-This v1 only uses the **native** skip buttons. Shows that don't have them won't auto-skip. AniSkip-style crowdsourced fallback is planned for v2.
+- **MutationObserver + 500ms interval** on the player DOM watches for buttons matching "Skip Intro" / "Skip Credits" / "Next Episode" by visible text, `data-testid`, or `aria-label` and clicks them as soon as they appear.
+- Auto-next is event-driven — only fires when the main `<video>` emits `ended`. Pause/play and timeline scrubs cannot trigger it.
+- **AniSkip fallback** for shows where Crunchyroll doesn't expose Skip buttons (e.g. One Piece): looks up the show's MAL ID via AniList GraphQL, fetches crowdsourced OP/ED timestamps from `api.aniskip.com`, and seeks the `<video>` past those intervals as `currentTime` enters them. Caches MAL IDs and skip-times in `localStorage` so each show is only looked up once.
 
 ## Verify it's working
 
@@ -43,10 +41,11 @@ This v1 only uses the **native** skip buttons. Shows that don't have them won't 
 The three features can be turned off independently from the browser console:
 
 ```js
-localStorage.setItem('cr-autoskip-intro', '0'); // skip intro
-localStorage.setItem('cr-autoskip-outro', '0'); // skip credits
-localStorage.setItem('cr-autoskip-next',  '0'); // auto next episode
-localStorage.setItem('cr-autoskip-debug', '1'); // verbose logging
+localStorage.setItem('cr-autoskip-intro',   '0'); // native Skip Intro click
+localStorage.setItem('cr-autoskip-outro',   '0'); // native Skip Credits click
+localStorage.setItem('cr-autoskip-next',    '0'); // auto next episode on video ended
+localStorage.setItem('cr-autoskip-aniskip', '0'); // AniSkip crowdsourced OP/ED seek
+localStorage.setItem('cr-autoskip-debug',   '1'); // verbose logging
 
 // Re-enable
 localStorage.removeItem('cr-autoskip-intro');
@@ -76,5 +75,5 @@ If you fork this to a different GitHub user, find/replace `JoshApp` (and lowerca
 
 ## Roadmap
 
-- **v2:** AniSkip API fallback for shows without native skip buttons (uses MAL ID via the `arm` mapping; seeks past OP/ED timestamps).
-- **v3:** Settings UI instead of localStorage flags; per-show overrides.
+- Settings UI instead of localStorage flags; per-show overrides.
+- "Skip recap" / "skip preview" toggles that apply only some AniSkip skip types.
