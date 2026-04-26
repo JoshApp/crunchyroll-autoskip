@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Crunchyroll Auto Skip + Next
 // @namespace    https://github.com/JoshApp/crunchyroll-autoskip
-// @version      0.2.1
+// @version      0.2.2
 // @description  Auto-clicks Crunchyroll's Skip Intro / Skip Credits / Next Episode buttons.
 // @author       josh
 // @match        *://*.crunchyroll.com/*
@@ -52,27 +52,52 @@
     return null;
   };
 
-  // Crunchyroll's player has a permanent "Next Episode" button in the controls
-  // bar, plus other places "Next Episode" appears (timeline previews etc.).
-  // We only want the large end-of-episode card overlay. Three filters:
-  // 1) video must be in its final stretch (last NEXT_WINDOW_SEC seconds)
-  // 2) matched element must be at least NEXT_MIN_WIDTH x NEXT_MIN_HEIGHT
-  //    (the controls-bar button is ~44px tall; the end card is much bigger)
-  const NEXT_WINDOW_SEC = 30;
+  // The page can have multiple <video> elements (thumbnail previews etc.).
+  // The main player is the largest one on screen.
+  const getMainVideo = () => {
+    let main = null;
+    let maxArea = 0;
+    for (const v of document.querySelectorAll('video')) {
+      const r = v.getBoundingClientRect();
+      const area = r.width * r.height;
+      if (area > maxArea) { maxArea = area; main = v; }
+    }
+    return main;
+  };
+
+  // Belt-and-suspenders size filter for the "Next Episode" card overlay so
+  // we never click the small button in the controls bar.
   const NEXT_MIN_WIDTH  = 250;
   const NEXT_MIN_HEIGHT = 80;
-  const isNearVideoEnd = () => {
-    const v = document.querySelector('video');
-    if (!v || !isFinite(v.duration) || v.duration === 0) return false;
-    return v.duration - v.currentTime <= NEXT_WINDOW_SEC;
-  };
   const isLargeEnough = (el) => {
     const r = el.getBoundingClientRect();
     return r.width >= NEXT_MIN_WIDTH && r.height >= NEXT_MIN_HEIGHT;
   };
 
-  // Cooldown per logical action so a sticky/persistent button doesn't get spammed,
-  // but the next episode (>5s later) still triggers a fresh click.
+  // Crunchyroll's player is React-driven; a bare el.click() doesn't always
+  // trigger its handlers. Dispatch the full pointer/mouse sequence first.
+  const richClick = (el) => {
+    try {
+      const rect = el.getBoundingClientRect();
+      const x = rect.left + rect.width / 2;
+      const y = rect.top + rect.height / 2;
+      const opts = {
+        bubbles: true, cancelable: true, view: window,
+        button: 0, clientX: x, clientY: y, screenX: x, screenY: y,
+      };
+      el.dispatchEvent(new PointerEvent('pointerdown', opts));
+      el.dispatchEvent(new MouseEvent('mousedown', opts));
+      el.dispatchEvent(new PointerEvent('pointerup', opts));
+      el.dispatchEvent(new MouseEvent('mouseup', opts));
+    } catch (e) {
+      log('rich click dispatch failed, falling back to .click()', e);
+    }
+    el.click();
+  };
+
+  // Cooldown per logical action — keeps us from re-clicking the same button
+  // over and over while it's still on screen, but a new episode (well past
+  // 5s) still triggers a fresh click.
   const lastClickAt = {};
   const COOLDOWN_MS = 5000;
   const clickOnce = (el, label) => {
@@ -80,7 +105,7 @@
     if (lastClickAt[label] && now - lastClickAt[label] < COOLDOWN_MS) return false;
     lastClickAt[label] = now;
     log(`clicking ${label}`, el);
-    el.click();
+    richClick(el);
     return true;
   };
 
@@ -93,7 +118,39 @@
   const NEXT_EP_TEXTS  = ['next episode', 'play next', 'up next'];
   const NEXT_EP_ATTRS  = ['nextepisode', 'next-episode', 'upnext', 'up-next'];
 
+  // Auto-next is event-driven: only fires when the main video element emits
+  // 'ended'. Pause/play, timeline scrubs, etc. cannot trigger this — only the
+  // video actually finishing does. After it fires we scan for the wide+tall
+  // end-of-episode card and click that.
+  const hasEndedListener = new WeakSet();
+  const onMainVideoEnded = () => {
+    if (!FEATURES.autoNext) return;
+    log('main video ended; looking for next-episode card');
+    const tryClick = () => {
+      const btn = findClickable((el) =>
+        (matchesText(el, NEXT_EP_TEXTS) ||
+         matchesAttr(el, 'data-testid', NEXT_EP_ATTRS) ||
+         matchesAttr(el, 'aria-label', NEXT_EP_TEXTS)) &&
+        isLargeEnough(el)
+      );
+      if (btn) { clickOnce(btn, 'auto-next'); return true; }
+      return false;
+    };
+    if (tryClick()) return;
+    setTimeout(tryClick, 500);
+    setTimeout(tryClick, 2000);
+  };
+  const ensureEndedListener = () => {
+    const v = getMainVideo();
+    if (!v || hasEndedListener.has(v)) return;
+    hasEndedListener.add(v);
+    v.addEventListener('ended', onMainVideoEnded);
+    log('attached ended listener to main video', v);
+  };
+
   const tick = () => {
+    ensureEndedListener();
+
     if (FEATURES.skipIntro) {
       const btn = findClickable((el) =>
         matchesText(el, SKIP_INTRO_TEXTS) ||
@@ -110,16 +167,6 @@
         matchesAttr(el, 'aria-label', SKIP_OUTRO_TEXTS)
       );
       if (btn) clickOnce(btn, 'skip-outro');
-    }
-
-    if (FEATURES.autoNext && isNearVideoEnd()) {
-      const btn = findClickable((el) =>
-        (matchesText(el, NEXT_EP_TEXTS) ||
-         matchesAttr(el, 'data-testid', NEXT_EP_ATTRS) ||
-         matchesAttr(el, 'aria-label', NEXT_EP_TEXTS)) &&
-        isLargeEnough(el)
-      );
-      if (btn) clickOnce(btn, 'auto-next');
     }
   };
 
