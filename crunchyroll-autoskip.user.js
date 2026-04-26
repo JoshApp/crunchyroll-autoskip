@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Crunchyroll Auto Skip + Next
 // @namespace    https://github.com/JoshApp/crunchyroll-autoskip
-// @version      0.2.2
+// @version      0.2.3
 // @description  Auto-clicks Crunchyroll's Skip Intro / Skip Credits / Next Episode buttons.
 // @author       josh
 // @match        *://*.crunchyroll.com/*
@@ -15,6 +15,7 @@
 (function () {
   'use strict';
 
+  const VERSION = '0.2.3';
   const DEBUG = localStorage.getItem('cr-autoskip-debug') === '1';
   const FEATURES = {
     skipIntro: localStorage.getItem('cr-autoskip-intro') !== '0',
@@ -44,8 +45,13 @@
     return fragments.some((f) => v.includes(f));
   };
 
+  // Only iterate over genuinely interactive elements. Including [data-testid]
+  // here was a bug: a container DIV with data-testid (e.g. "player-controls-
+  // root") inherits its descendants' textContent, so the parent matched
+  // "Skip Intro" before the actual <button> did, and clicking the DIV does
+  // nothing.
   const findClickable = (predicate) => {
-    const els = document.querySelectorAll('button, [role="button"], a, [data-testid]');
+    const els = document.querySelectorAll('button, [role="button"], a');
     for (const el of els) {
       if (predicate(el) && isVisible(el)) return el;
     }
@@ -188,7 +194,7 @@
     observer.observe(document.body, { childList: true, subtree: true });
     tick();
     console.log(
-      '%c[cr-autoskip] active',
+      `%c[cr-autoskip] v${VERSION} active`,
       'color:#f47521;font-weight:bold',
       FEATURES
     );
