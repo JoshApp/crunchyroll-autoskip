@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Crunchyroll Auto Skip — Setup</title>
+<style>
+  :root {
+    --bg: #0e0e10;
+    --panel: #1a1a1f;
+    --text: #e7e7ea;
+    --muted: #9a9aa3;
+    --primary: #f47521;
+    --primary-hover: #ff8c3a;
+    --border: #2a2a31;
+    --success: #4ade80;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .wrapper { width: 100%; max-width: 560px; }
+  h1 { font-size: 28px; margin: 0 0 8px; color: var(--primary); }
+  .subtitle { color: var(--muted); margin: 0 0 32px; }
+  .progress {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 24px;
+  }
+  .progress .dot {
+    flex: 1;
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    transition: background .2s;
+  }
+  .progress .dot.active { background: var(--primary); }
+  .progress .dot.done { background: var(--success); }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 28px;
+    margin-bottom: 16px;
+  }
+  .card h2 { margin: 0 0 12px; font-size: 22px; }
+  .card p { color: var(--muted); margin: 0 0 16px; }
+  .btn {
+    display: inline-block;
+    padding: 12px 20px;
+    border-radius: 8px;
+    background: var(--primary);
+    color: #111;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+    border: none;
+    font-size: 16px;
+    transition: background .15s;
+  }
+  .btn:hover { background: var(--primary-hover); }
+  .btn.secondary {
+    background: transparent;
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+  .btn.secondary:hover { background: var(--border); }
+  .btn-row {
+    display: flex;
+    gap: 12px;
+    margin-top: 20px;
+    flex-wrap: wrap;
+  }
+  .step { display: none; }
+  .step.active { display: block; }
+  .hint {
+    margin-top: 16px;
+    padding: 12px;
+    background: rgba(244, 117, 33, 0.08);
+    border-left: 3px solid var(--primary);
+    border-radius: 4px;
+    font-size: 14px;
+    color: var(--muted);
+  }
+  .browser-pill {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: var(--border);
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 16px;
+  }
+  code {
+    background: var(--border);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 14px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  details { margin-top: 16px; }
+  summary {
+    cursor: pointer;
+    color: var(--muted);
+    font-size: 14px;
+    padding: 4px 0;
+  }
+  details[open] summary { color: var(--text); }
+  .footer {
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+    margin-top: 16px;
+  }
+  .footer a { color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrapper">
+  <h1>Crunchyroll Auto Skip</h1>
+  <p class="subtitle">Skip intros, credits, and auto-play next episode. 3 steps, ~30 seconds.</p>
+
+  <div class="progress">
+    <div class="dot" id="dot-1"></div>
+    <div class="dot" id="dot-2"></div>
+    <div class="dot" id="dot-3"></div>
+  </div>
+
+  <div class="card step" id="step-1">
+    <span class="browser-pill" id="browser-pill">Detecting browser…</span>
+    <h2>Step 1 — Install Tampermonkey</h2>
+    <p>Tampermonkey is a free browser extension. It runs the auto-skip script for us. You only need to install it once.</p>
+    <a href="#" class="btn" id="tm-install" target="_blank" rel="noopener">Install Tampermonkey</a>
+    <div class="btn-row">
+      <button class="btn secondary" id="tm-done">I've installed it →</button>
+    </div>
+    <div class="hint" id="safari-hint" hidden>
+      Safari uses a different free app called <strong>Userscripts</strong>. After installing, open Safari → Settings → Extensions and enable it. Then click "I've installed it" below.
+    </div>
+  </div>
+
+  <div class="card step" id="step-2">
+    <h2>Step 2 — Install the Skip Script</h2>
+    <p>Click the button below. Tampermonkey will pop up a dialog showing the script — click <strong>Install</strong> in that dialog.</p>
+    <a href="#" class="btn" id="script-install">Install Skip Script</a>
+    <div class="btn-row">
+      <button class="btn secondary" id="back-1">← Back</button>
+      <button class="btn secondary" id="script-done">Installed →</button>
+    </div>
+    <details>
+      <summary>Didn't see an install dialog?</summary>
+      <p style="margin-top: 12px;">If the script appeared as plain text in your browser, Tampermonkey isn't picking it up. Make sure step 1 is complete (the Tampermonkey icon should show in your browser toolbar), refresh this page, and try again.</p>
+    </details>
+  </div>
+
+  <div class="card step" id="step-3">
+    <h2>Step 3 — Try it out</h2>
+    <p>Open Crunchyroll and play any episode. Skip Intro, Skip Credits, and Next Episode buttons should now click themselves.</p>
+    <a href="https://www.crunchyroll.com/" class="btn" target="_blank" rel="noopener">Open Crunchyroll</a>
+    <div class="btn-row">
+      <button class="btn secondary" id="back-2">← Back</button>
+    </div>
+    <div class="hint">
+      <strong>Verify it loaded:</strong> on Crunchyroll, open DevTools console (Cmd+Opt+J in Chrome / Cmd+Opt+C in Safari). You should see <code>[cr-autoskip] active</code> in orange.
+    </div>
+    <details>
+      <summary>Updates</summary>
+      <p style="margin-top: 12px;">Tampermonkey checks for script updates daily on its own. You'll get a small "update available" badge — click it once and you're current. No need to revisit this page.</p>
+    </details>
+  </div>
+
+  <p class="footer">
+    <a href="https://github.com/JoshApp/crunchyroll-autoskip" target="_blank" rel="noopener">Source on GitHub</a>
+  </p>
+</div>
+
+<script>
+  // Pages URLs are lowercase regardless of repo owner casing.
+  const PAGES_HOST = 'joshapp.github.io';
+  const REPO_NAME = 'crunchyroll-autoskip';
+  const SCRIPT_URL = `https://${PAGES_HOST}/${REPO_NAME}/crunchyroll-autoskip.user.js`;
+
+  const ua = navigator.userAgent;
+  const isFirefox = /Firefox/i.test(ua);
+  const isSafari  = /^((?!chrome|android).)*safari/i.test(ua) && !/Chrome|Chromium|Edg|OPR/i.test(ua);
+
+  const TM_LINKS = {
+    chromium: 'https://chromewebstore.google.com/detail/tampermonkey/dhdgffkkebhmkfjojejmpbldmpobfkfo',
+    firefox:  'https://addons.mozilla.org/firefox/addon/tampermonkey/',
+    safari:   'https://apps.apple.com/us/app/userscripts/id1463298887',
+  };
+
+  const browserPill = document.getElementById('browser-pill');
+  const tmInstall = document.getElementById('tm-install');
+  const safariHint = document.getElementById('safari-hint');
+
+  if (isFirefox) {
+    browserPill.textContent = 'Firefox detected';
+    tmInstall.href = TM_LINKS.firefox;
+  } else if (isSafari) {
+    browserPill.textContent = 'Safari detected';
+    tmInstall.href = TM_LINKS.safari;
+    tmInstall.textContent = 'Install Userscripts app';
+    safariHint.hidden = false;
+  } else {
+    browserPill.textContent = 'Chrome / Edge / Brave / Arc detected';
+    tmInstall.href = TM_LINKS.chromium;
+  }
+
+  document.getElementById('script-install').href = SCRIPT_URL;
+
+  const dots = [
+    document.getElementById('dot-1'),
+    document.getElementById('dot-2'),
+    document.getElementById('dot-3'),
+  ];
+  const stepCards = [
+    document.getElementById('step-1'),
+    document.getElementById('step-2'),
+    document.getElementById('step-3'),
+  ];
+
+  function setStep(n) {
+    stepCards.forEach((c, i) => c.classList.toggle('active', i === n - 1));
+    dots.forEach((d, i) => {
+      d.classList.toggle('active', i === n - 1);
+      d.classList.toggle('done', i < n - 1);
+    });
+    history.replaceState(null, '', `#step-${n}`);
+  }
+
+  document.getElementById('tm-done').addEventListener('click',     () => setStep(2));
+  document.getElementById('script-done').addEventListener('click', () => setStep(3));
+  document.getElementById('back-1').addEventListener('click',      () => setStep(1));
+  document.getElementById('back-2').addEventListener('click',      () => setStep(2));
+
+  const hashStep = parseInt((location.hash.match(/#step-(\d)/) || [])[1], 10);
+  setStep(hashStep >= 1 && hashStep <= 3 ? hashStep : 1);
+</script>
+</body>
+</html>
