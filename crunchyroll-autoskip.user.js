@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Crunchyroll Auto Skip + Next
 // @namespace    https://github.com/JoshApp/crunchyroll-autoskip
-// @version      0.3.0
+// @version      0.3.1
 // @description  Auto-clicks Crunchyroll's Skip Intro / Skip Credits / Next Episode buttons. Falls back to AniSkip's crowdsourced timestamps for shows without native skip buttons.
 // @author       josh
 // @match        *://*.crunchyroll.com/*
@@ -15,7 +15,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '0.3.0';
+  const VERSION = '0.3.1';
   const DEBUG = localStorage.getItem('cr-autoskip-debug') === '1';
   const FEATURES = {
     skipIntro: localStorage.getItem('cr-autoskip-intro')   !== '0',
@@ -154,6 +154,10 @@
   const SKIP_TYPES    = ['op', 'ed', 'mixed-op', 'mixed-ed', 'recap'];
   const MAL_CACHE_KEY = 'cr-autoskip-malid-cache';
   const SKIP_CACHE_KEY = 'cr-autoskip-skiptimes-cache';
+  // AniSkip submissions sometimes include garbage entries (e.g. 0.7-second
+  // "OP" intervals that aren't real openings). Reject anything shorter than
+  // this — real OP/ED are 60-90s; even short ones are 30s+.
+  const MIN_SKIP_DURATION_SEC = 5;
 
   const safeParse = (str, fallback) => {
     try { return JSON.parse(str || ''); } catch { return fallback; }
@@ -267,10 +271,26 @@
     aniSkipState.applied = new Set();
     const malId = await fetchMalId(title);
     if (!malId || aniSkipState.key !== key) return;
-    const times = await fetchSkipTimes(malId, ep, v.duration);
+    const raw = await fetchSkipTimes(malId, ep, v.duration);
     if (aniSkipState.key !== key) return;
+    // Drop garbage submissions — real OP/ED are at least MIN_SKIP_DURATION_SEC long.
+    const times = raw.filter((skip) => {
+      const i = skip.interval || skip;
+      const start = Number(i.startTime ?? i.start);
+      const end   = Number(i.endTime   ?? i.end);
+      return isFinite(start) && isFinite(end) && (end - start) >= MIN_SKIP_DURATION_SEC;
+    });
     aniSkipState.times = times;
-    log('AniSkip: armed', key, 'with', times.length, 'intervals');
+    const summary = times.length
+      ? times.map((s) => {
+          const i = s.interval || s;
+          return `${s.skipType}[${Number(i.startTime ?? i.start).toFixed(0)}-${Number(i.endTime ?? i.end).toFixed(0)}]`;
+        }).join(', ')
+      : '<no usable intervals>';
+    log(`AniSkip: armed ${title} ep ${ep} (mal=${malId}) — ${summary}`);
+    if (raw.length > times.length) {
+      log(`AniSkip: filtered out ${raw.length - times.length} sub-${MIN_SKIP_DURATION_SEC}s interval(s)`);
+    }
   };
 
   const onTimeUpdate = () => {
