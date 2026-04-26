@@ -90,6 +90,16 @@
     font-size: 14px;
     color: var(--muted);
   }
+  .warn {
+    margin-top: 16px;
+    padding: 12px;
+    background: rgba(250, 204, 21, 0.08);
+    border-left: 3px solid #facc15;
+    border-radius: 4px;
+    font-size: 14px;
+    color: var(--text);
+  }
+  .warn strong { color: #facc15; }
   .browser-pill {
     display: inline-block;
     padding: 4px 10px;
@@ -155,9 +165,13 @@
       <button class="btn secondary" id="back-1">← Back</button>
       <button class="btn secondary" id="script-done">Installed →</button>
     </div>
+    <div class="warn">
+      <strong>Saw a "Script Installation" page from tampermonkey.net?</strong><br>
+      That page only appears when Tampermonkey isn't installed (or isn't enabled in this browser). Go back to step 1, install it, then come back. If you installed it in a different browser, open this wizard in the same browser as Tampermonkey.
+    </div>
     <details>
-      <summary>Didn't see an install dialog?</summary>
-      <p style="margin-top: 12px;">If the script appeared as plain text in your browser, Tampermonkey isn't picking it up. Make sure step 1 is complete (the Tampermonkey icon should show in your browser toolbar), refresh this page, and try again.</p>
+      <summary>Other troubleshooting</summary>
+      <p style="margin-top: 12px;">If the script appeared as plain text or downloaded as a file, Tampermonkey isn't picking it up. Confirm the Tampermonkey icon shows in your browser toolbar, refresh this page, and try again.</p>
     </details>
   </div>
 
