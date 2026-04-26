@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Crunchyroll Auto Skip + Next
 // @namespace    https://github.com/JoshApp/crunchyroll-autoskip
-// @version      0.2.3
+// @version      0.2.4
 // @description  Auto-clicks Crunchyroll's Skip Intro / Skip Credits / Next Episode buttons.
 // @author       josh
 // @match        *://*.crunchyroll.com/*
@@ -15,7 +15,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '0.2.3';
+  const VERSION = '0.2.4';
   const DEBUG = localStorage.getItem('cr-autoskip-debug') === '1';
   const FEATURES = {
     skipIntro: localStorage.getItem('cr-autoskip-intro') !== '0',
@@ -80,26 +80,11 @@
     return r.width >= NEXT_MIN_WIDTH && r.height >= NEXT_MIN_HEIGHT;
   };
 
-  // Crunchyroll's player is React-driven; a bare el.click() doesn't always
-  // trigger its handlers. Dispatch the full pointer/mouse sequence first.
-  const richClick = (el) => {
-    try {
-      const rect = el.getBoundingClientRect();
-      const x = rect.left + rect.width / 2;
-      const y = rect.top + rect.height / 2;
-      const opts = {
-        bubbles: true, cancelable: true, view: window,
-        button: 0, clientX: x, clientY: y, screenX: x, screenY: y,
-      };
-      el.dispatchEvent(new PointerEvent('pointerdown', opts));
-      el.dispatchEvent(new MouseEvent('mousedown', opts));
-      el.dispatchEvent(new PointerEvent('pointerup', opts));
-      el.dispatchEvent(new MouseEvent('mouseup', opts));
-    } catch (e) {
-      log('rich click dispatch failed, falling back to .click()', e);
-    }
-    el.click();
-  };
+  // Plain .click() is enough now that the candidate selector targets the
+  // real <button>. The richer pointer/mouse sequence we used in 0.2.2 was
+  // firing Crunchyroll's React handlers twice (once on pointerdown, once
+  // on click), which made Skip Intro skip too far / desync the timeline.
+  const doClick = (el) => el.click();
 
   // Cooldown per logical action — keeps us from re-clicking the same button
   // over and over while it's still on screen, but a new episode (well past
@@ -111,7 +96,7 @@
     if (lastClickAt[label] && now - lastClickAt[label] < COOLDOWN_MS) return false;
     lastClickAt[label] = now;
     log(`clicking ${label}`, el);
-    richClick(el);
+    doClick(el);
     return true;
   };
 
