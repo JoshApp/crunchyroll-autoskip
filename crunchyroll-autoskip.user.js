@@ -1,12 +1,11 @@
 // ==UserScript==
 // @name         Crunchyroll Auto Skip + Next
 // @namespace    https://github.com/JoshApp/crunchyroll-autoskip
-// @version      0.1.0
+// @version      0.1.1
 // @description  Auto-clicks Crunchyroll's Skip Intro / Skip Credits / Next Episode buttons.
 // @author       josh
-// @match        https://www.crunchyroll.com/*
-// @match        https://beta.crunchyroll.com/*
-// @match        https://static.crunchyroll.com/*
+// @match        *://*.crunchyroll.com/*
+// @match        *://crunchyroll.com/*
 // @run-at       document-idle
 // @grant        none
 // @updateURL    https://joshapp.github.io/crunchyroll-autoskip/crunchyroll-autoskip.user.js
