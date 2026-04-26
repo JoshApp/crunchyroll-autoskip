@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Crunchyroll Auto Skip + Next
 // @namespace    https://github.com/JoshApp/crunchyroll-autoskip
-// @version      0.2.0
+// @version      0.2.1
 // @description  Auto-clicks Crunchyroll's Skip Intro / Skip Credits / Next Episode buttons.
 // @author       josh
 // @match        *://*.crunchyroll.com/*
@@ -52,18 +52,24 @@
     return null;
   };
 
-  // Crunchyroll's player has a permanent small "Next Episode" button in the
-  // controls bar. We only want the large end-of-episode card. Two filters:
-  // 1) the video must be in its final stretch (last NEXT_WINDOW_SEC seconds)
-  // 2) the matched element must be at least NEXT_MIN_WIDTH px wide
-  const NEXT_WINDOW_SEC = 90;
-  const NEXT_MIN_WIDTH = 200;
+  // Crunchyroll's player has a permanent "Next Episode" button in the controls
+  // bar, plus other places "Next Episode" appears (timeline previews etc.).
+  // We only want the large end-of-episode card overlay. Three filters:
+  // 1) video must be in its final stretch (last NEXT_WINDOW_SEC seconds)
+  // 2) matched element must be at least NEXT_MIN_WIDTH x NEXT_MIN_HEIGHT
+  //    (the controls-bar button is ~44px tall; the end card is much bigger)
+  const NEXT_WINDOW_SEC = 30;
+  const NEXT_MIN_WIDTH  = 250;
+  const NEXT_MIN_HEIGHT = 80;
   const isNearVideoEnd = () => {
     const v = document.querySelector('video');
     if (!v || !isFinite(v.duration) || v.duration === 0) return false;
     return v.duration - v.currentTime <= NEXT_WINDOW_SEC;
   };
-  const isWideEnough = (el) => el.getBoundingClientRect().width >= NEXT_MIN_WIDTH;
+  const isLargeEnough = (el) => {
+    const r = el.getBoundingClientRect();
+    return r.width >= NEXT_MIN_WIDTH && r.height >= NEXT_MIN_HEIGHT;
+  };
 
   // Cooldown per logical action so a sticky/persistent button doesn't get spammed,
   // but the next episode (>5s later) still triggers a fresh click.
@@ -111,7 +117,7 @@
         (matchesText(el, NEXT_EP_TEXTS) ||
          matchesAttr(el, 'data-testid', NEXT_EP_ATTRS) ||
          matchesAttr(el, 'aria-label', NEXT_EP_TEXTS)) &&
-        isWideEnough(el)
+        isLargeEnough(el)
       );
       if (btn) clickOnce(btn, 'auto-next');
     }
