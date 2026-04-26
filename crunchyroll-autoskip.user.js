@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Crunchyroll Auto Skip + Next
 // @namespace    https://github.com/JoshApp/crunchyroll-autoskip
-// @version      0.2.4
+// @version      0.2.5
 // @description  Auto-clicks Crunchyroll's Skip Intro / Skip Credits / Next Episode buttons.
 // @author       josh
 // @match        *://*.crunchyroll.com/*
@@ -15,7 +15,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '0.2.4';
+  const VERSION = '0.2.5';
   const DEBUG = localStorage.getItem('cr-autoskip-debug') === '1';
   const FEATURES = {
     skipIntro: localStorage.getItem('cr-autoskip-intro') !== '0',
@@ -162,14 +162,23 @@
   };
 
   let scheduled = false;
-  const observer = new MutationObserver(() => {
+  const scheduleTick = () => {
     if (scheduled) return;
     scheduled = true;
     requestAnimationFrame(() => {
       scheduled = false;
       tick();
     });
-  });
+  };
+  const observer = new MutationObserver(scheduleTick);
+
+  // Crunchyroll fades the Skip Intro button in via CSS transition
+  // (opacity 0 -> 1 over ~300ms). The MutationObserver fires once when
+  // the node is added (opacity still 0, isVisible rejects it) and never
+  // again until something else mutates the DOM. Without this periodic
+  // fallback, the click only happens later when the user pauses/plays
+  // and incidentally triggers a fresh mutation.
+  const TICK_INTERVAL_MS = 500;
 
   const start = () => {
     if (!document.body) {
@@ -177,6 +186,7 @@
       return;
     }
     observer.observe(document.body, { childList: true, subtree: true });
+    setInterval(scheduleTick, TICK_INTERVAL_MS);
     tick();
     console.log(
       `%c[cr-autoskip] v${VERSION} active`,
