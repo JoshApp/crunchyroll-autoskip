@@ -153,7 +153,15 @@
       <button class="btn secondary" id="tm-done">I've installed it →</button>
     </div>
     <div class="hint" id="safari-hint" hidden>
-      Safari uses a different free app called <strong>Userscripts</strong>. After installing, open Safari → Settings → Extensions and enable it. Then click "I've installed it" below.
+      Safari uses a different free app called <strong>Userscripts</strong>. After installing, open Safari → Settings → Extensions and enable it. Then tap "I've installed it" below.
+    </div>
+    <div class="hint" id="ios-hint" hidden>
+      iPhone uses an app called <strong>Userscripts</strong> (Tampermonkey doesn't exist on iOS). After installing from the App Store, you also need to:
+      <ol style="margin: 8px 0 0 0; padding-left: 20px;">
+        <li>Open <strong>iPhone Settings → Safari → Extensions</strong>, tap <strong>Userscripts</strong>, toggle it on, and set <em>Other Websites</em> to <strong>Allow</strong>.</li>
+        <li>Come back to Safari, tap the <strong>"AA"</strong> in the address bar → <strong>Manage Extensions</strong>, and make sure Userscripts is enabled.</li>
+      </ol>
+      Then tap "I've installed it" below.
     </div>
   </div>
 
@@ -168,6 +176,9 @@
     <div class="warn">
       <strong>Saw a "Script Installation" page from tampermonkey.net?</strong><br>
       That page only appears when Tampermonkey isn't installed (or isn't enabled in this browser). Go back to step 1, install it, then come back. If you installed it in a different browser, open this wizard in the same browser as Tampermonkey.
+    </div>
+    <div class="hint" id="ios-step2-hint" hidden>
+      <strong>On iPhone:</strong> tap <strong>Install Skip Script</strong>. The Userscripts extension should offer to save the script — tap <strong>Save</strong> / <strong>Allow</strong>. If you instead see plain script text in Safari, tap-and-hold → <strong>Select All</strong> → <strong>Copy</strong>, open the <strong>Userscripts app</strong>, tap <strong>+</strong> → <strong>New Userscript</strong>, paste, and save. Either way, finish by opening the <strong>Userscripts app</strong> and confirming the script's toggle is on.
     </div>
     <details>
       <summary>Other troubleshooting</summary>
@@ -203,24 +214,36 @@
   const SCRIPT_URL = `https://${PAGES_HOST}/${REPO_NAME}/crunchyroll-autoskip.user.js`;
 
   const ua = navigator.userAgent;
-  const isFirefox = /Firefox/i.test(ua);
-  const isSafari  = /^((?!chrome|android).)*safari/i.test(ua) && !/Chrome|Chromium|Edg|OPR/i.test(ua);
+  // iPadOS 13+ reports as Mac in the UA — disambiguate via touch points.
+  const isIOS = /iPhone|iPad|iPod/i.test(ua) ||
+                (/Mac/i.test(navigator.platform || '') && (navigator.maxTouchPoints || 0) > 1);
+  const isFirefox = /Firefox/i.test(ua) && !isIOS;
+  const isMacSafari = !isIOS && /^((?!chrome|android).)*safari/i.test(ua) && !/Chrome|Chromium|Edg|OPR/i.test(ua);
 
   const TM_LINKS = {
     chromium: 'https://chromewebstore.google.com/detail/tampermonkey/dhdgffkkebhmkfjojejmpbldmpobfkfo',
     firefox:  'https://addons.mozilla.org/firefox/addon/tampermonkey/',
     safari:   'https://apps.apple.com/us/app/userscripts/id1463298887',
+    ios:      'https://apps.apple.com/us/app/userscripts/id1463298887',
   };
 
-  const browserPill = document.getElementById('browser-pill');
-  const tmInstall = document.getElementById('tm-install');
-  const safariHint = document.getElementById('safari-hint');
+  const browserPill   = document.getElementById('browser-pill');
+  const tmInstall     = document.getElementById('tm-install');
+  const safariHint    = document.getElementById('safari-hint');
+  const iosHint       = document.getElementById('ios-hint');
+  const iosStep2Hint  = document.getElementById('ios-step2-hint');
 
-  if (isFirefox) {
+  if (isIOS) {
+    browserPill.textContent = 'iPhone / iPad detected';
+    tmInstall.href = TM_LINKS.ios;
+    tmInstall.textContent = 'Install Userscripts (App Store)';
+    iosHint.hidden = false;
+    iosStep2Hint.hidden = false;
+  } else if (isFirefox) {
     browserPill.textContent = 'Firefox detected';
     tmInstall.href = TM_LINKS.firefox;
-  } else if (isSafari) {
-    browserPill.textContent = 'Safari detected';
+  } else if (isMacSafari) {
+    browserPill.textContent = 'Safari (Mac) detected';
     tmInstall.href = TM_LINKS.safari;
     tmInstall.textContent = 'Install Userscripts app';
     safariHint.hidden = false;
